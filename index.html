@@ -315,24 +315,30 @@
       Preencha o formulário abaixo que a nossa equipe entra em contato com você agora mesmo pelo WhatsApp.
     </p>
 
-    <form id="leadForm" novalidate>
+    <!-- NOMENCLATURA CANÔNICA (TRACKING.md §6.0) — não traduzir os nomes.
+         ⚠ O id do <form> DEVE ser o identificador deste site no painel da
+         PixelX (o equivalente a IPEyzyfmJhKQEYIXAlZH / eiBtTROiAlNexbHXklSc das
+         outras landings). Enquanto ele for "lead_form_presencial_em_casa", não
+         existe regra vinculada e o site depende do send_event — que é o que
+         está espalhando o Lead para TODAS as tags Meta. Ver nota no script.js. -->
+    <form class="form" name="lead_form" id="lead_form_presencial_em_casa" novalidate>
       <div class="field">
-        <label for="nome">Nome completo</label>
-        <input type="text" id="nome" name="nome" placeholder="Seu nome completo" required autocomplete="name">
-        <span class="err" data-err="nome"></span>
+        <label for="lead_name">Nome completo</label>
+        <input type="text" id="lead_name" name="name" placeholder="Seu nome completo" required autocomplete="name">
+        <span class="err" data-error-for="name"></span>
       </div>
       <div class="field">
-        <label for="email">E-mail</label>
-        <input type="email" id="email" name="email" placeholder="seuemail@gmail.com" required autocomplete="email">
-        <span class="err" data-err="email"></span>
+        <label for="lead_email">E-mail</label>
+        <input type="email" id="lead_email" name="email" placeholder="seuemail@gmail.com" required autocomplete="email">
+        <span class="err" data-error-for="email"></span>
       </div>
       <div class="field">
-        <label for="whatsapp">WhatsApp (com DDD)</label>
-        <input type="tel" id="whatsapp" name="whatsapp" class="pxa_mask_phone" placeholder="(81) 9 9999-9999" required autocomplete="tel">
-        <span class="err" data-err="whatsapp"></span>
+        <label for="lead_phone">WhatsApp (com DDD)</label>
+        <input class="pxa_mask_phone" type="text" id="lead_phone" name="phone" placeholder="(81) 9 9999-9999" required autocomplete="tel">
+        <span class="err" data-error-for="phone"></span>
       </div>
 
-      <button class="btn btn--success btn--lg btn--block" type="submit" id="submitBtn">
+      <button class="btn btn--success btn--lg btn--block" type="submit" id="lead_submit">
         <span class="btn__label">QUERO FALAR COM A EQUIPE</span>
         <span class="spinner" hidden></span>
       </button>

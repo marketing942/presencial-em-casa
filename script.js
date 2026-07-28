@@ -13,17 +13,31 @@
 
      REGRA DE OURO: exatamente UM emissor de Lead.
 
-     LEAD_MODE = 'site'   -> Modelo B (§5): o site dispara o Lead.
-       Escolhido porque o <form> desta página NÃO tem o id opaco do painel
-       (é 'leadForm'), então uma regra de submit lá não encontraria nada
-       para vincular — é a Falha A do §8.1. O Modelo B não depende disso.
-       A barreira corta a propagação, então uma eventual regra de submit
-       no painel fica inerte e não há como duplicar por ali.
-       ⚠ Uma regra de CLIQUE no painel ainda duplicaria — ver §10.3.
+     🔴 CAUSA DO LEAD INDO PARA TODAS AS TAGS META
 
-     LEAD_MODE = 'painel' -> Modelo A: o painel dispara, o site não.
-       Só funciona depois de cadastrar este formulário no painel e trocar
-       o id do <form> pelo id que ele devolver.
+     Este site está em Modelo B: quem dispara é o `send_event` daqui. E um
+     `send_event` é NÃO-ROTEADO — ele não passa por regra de conversão nenhuma,
+     então a PixelX o entrega pelo padrão da conta, que é TODOS os destinos.
+     Daí o Lead aparecer nas três tags Meta.
+
+     Nas landings que estão certas (captura-cppem, pmpe, ManyChat, aniversário,
+     colégio, mentoria) quem dispara é a REGRA DO PAINEL, vinculada ao id opaco
+     no <form>. A regra tem destino configurado, e é isso que faz a conversão
+     chegar só onde deve.
+
+     O mesmo mecanismo explica o sintoma oposto visto no PMPE (§8.7), onde o
+     send_event não chegava a NENHUMA tag: sem roteamento, o destino é o padrão
+     da conta — que pode ser tudo ou nada. Nunca é o destino certo por acaso.
+
+     ➜ CORREÇÃO (2 passos, precisa do painel):
+        1. Cadastrar este formulário no painel da PixelX e pegar o id opaco.
+        2. Trocar o id do <form> no index.html por esse valor, e mudar
+           LEAD_MODE para 'painel' aqui embaixo.
+       Feito isso, o send_event para de ser chamado e a regra roteia sozinha.
+
+     ⚠ Enquanto LEAD_MODE continuar 'site', o Lead segue indo para todas as
+       tags. Trocar para 'painel' ANTES de cadastrar no painel zera o Lead —
+       não faça um sem o outro.
      ========================================================= */
   var LEAD_MODE = 'site';          // 'site' (Modelo B) | 'painel' (Modelo A)
   var PHONE_MODE = 'celular_br';   // 'celular_br' | 'celular_ou_fixo_br' | 'internacional'
@@ -238,42 +252,58 @@
   window.trackLead = trackLead;
 
   /* ---------- validação ---------- */
-  var form = document.getElementById('leadForm');
-  var submitBtn = document.getElementById('submitBtn');
+  var PIXELX_ID = 'lead_form_presencial_em_casa';   // trocar pelo id do painel
+
+  var form = document.getElementById(PIXELX_ID);
+
+  /* Referências explícitas em vez de form.elements[...]: com name="name", o
+     acesso nomeado colide com a propriedade nativa HTMLFormElement.name —
+     mesma família de armadilha do §7.3. */
+  var nomeInput = document.getElementById('lead_name');
+  var emailInput = document.getElementById('lead_email');
+  var telefoneInput = document.getElementById('lead_phone');
+  var submitBtn = document.getElementById('lead_submit');
   var btnLabel = submitBtn.querySelector('.btn__label');
   var spinner = submitBtn.querySelector('.spinner');
 
-  function setError(name, msg) {
-    var input = form.elements[name];
-    var slot = form.querySelector('[data-err="' + name + '"]');
+  var CAMPOS = { name: nomeInput, email: emailInput, phone: telefoneInput };
+
+  /* Falha barulhenta em vez de silenciosa (§8.1). */
+  if (!form) {
+    console.error('[tracking] Formulário "' + PIXELX_ID + '" não encontrado.');
+  }
+
+  function setError(key, msg) {
+    var input = CAMPOS[key];
+    var slot = form.querySelector('[data-error-for="' + key + '"]');
     if (slot) slot.textContent = msg || '';
-    input.classList.toggle('is-invalid', !!msg);
+    if (input) input.classList.toggle('is-invalid', !!msg);
   }
 
   function validate() {
     var ok = true;
-    var nome = form.elements.nome.value.trim();
-    var email = form.elements.email.value.trim();
-    var zap = form.elements.whatsapp.value.trim();
+    var nome = nomeInput.value.trim();
+    var email = emailInput.value.trim();
+    var zap = telefoneInput.value.trim();
 
     if (nome.length < 3 || nome.indexOf(' ') === -1) {
-      setError('nome', 'Informe seu nome completo.'); ok = false;
-    } else setError('nome', '');
+      setError('name', 'Informe seu nome completo.'); ok = false;
+    } else setError('name', '');
 
     if (!/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(email)) {
       setError('email', 'Informe um e-mail válido.'); ok = false;
     } else setError('email', '');
 
     if (!isPhone(zap)) {
-      setError('whatsapp', 'Informe seu WhatsApp com DDD — ex: (81) 90000-0000.'); ok = false;
-    } else setError('whatsapp', '');
+      setError('phone', 'Informe seu WhatsApp com DDD — ex: (81) 90000-0000.'); ok = false;
+    } else setError('phone', '');
 
     return ok;
   }
 
-  ['nome', 'email', 'whatsapp'].forEach(function (n) {
-    form.elements[n].addEventListener('input', function () {
-      if (form.elements[n].classList.contains('is-invalid')) validate();
+  Object.keys(CAMPOS).forEach(function (k) {
+    CAMPOS[k].addEventListener('input', function () {
+      if (CAMPOS[k].classList.contains('is-invalid')) validate();
     });
   });
 
@@ -299,9 +329,11 @@
       tab: ABA,
       pagina: 'Presencial em Casa',
       produto: 'Presencial em Casa',
-      nome: form.elements.nome.value.trim(),
-      email: form.elements.email.value.trim(),
-      whatsapp: form.elements.whatsapp.value.trim(),
+      /* As CHAVES abaixo continuam nome/email/whatsapp de propósito: são as
+         colunas da planilha (aba CASA). Só a origem dos valores mudou. */
+      nome: nomeInput.value.trim(),
+      email: emailInput.value.trim(),
+      whatsapp: telefoneInput.value.trim(),
       origem: window.location.href,
       data: new Date().toLocaleString('pt-BR')
     };
@@ -330,7 +362,17 @@
     }, REDIRECT_DELAY_MS);
   }
 
-  /* BARREIRA ÚNICA — "submit" capturado no DOCUMENT, em fase de captura (§7.8).
+  /* PRIMEIRA BARREIRA — no clique do botão, fase de captura (§7.8).
+     Se os dados forem inválidos, o preventDefault cancela a ação padrão do
+     botão e o navegador NUNCA chega a disparar o evento "submit". O Enter
+     também passa por aqui, via submissão implícita. */
+  if (submitBtn) {
+    submitBtn.addEventListener('click', function (e) {
+      if (!validate()) e.preventDefault();
+    }, true);
+  }
+
+  /* SEGUNDA BARREIRA — "submit" capturado no DOCUMENT, em fase de captura (§7.8).
      Roda SEMPRE antes de qualquer listener registrado no <form>, inclusive o
      que a PixelX instala de dentro de um start() assíncrono.
 
