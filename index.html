@@ -316,12 +316,11 @@
     </p>
 
     <!-- NOMENCLATURA CANÔNICA (TRACKING.md §6.0) — não traduzir os nomes.
-         ⚠ O id do <form> DEVE ser o identificador deste site no painel da
-         PixelX (o equivalente a IPEyzyfmJhKQEYIXAlZH / eiBtTROiAlNexbHXklSc das
-         outras landings). Enquanto ele for "lead_form_presencial_em_casa", não
-         existe regra vinculada e o site depende do send_event — que é o que
-         está espalhando o Lead para TODAS as tags Meta. Ver nota no script.js. -->
-    <form class="form" name="lead_form" id="lead_form_presencial_em_casa" novalidate>
+         O id do <form> é o identificador deste site no painel da PixelX: é um
+         `id`, no <form>, como nas outras landings. É ele que vincula a regra de
+         conversão — e é a regra que ROTEIA o Lead para o destino certo.
+         Não trocar sem antes ajustar o painel. -->
+    <form class="form" name="lead_form" id="IPEyzyfmJhKQEYIXAlZH" novalidate>
       <div class="field">
         <label for="lead_name">Nome completo</label>
         <input type="text" id="lead_name" name="name" placeholder="Seu nome completo" required autocomplete="name">

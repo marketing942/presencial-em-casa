@@ -9,40 +9,31 @@
   var WHATSAPP = 'https://checkout.cppem.com.br/pay/presencial-em-casa-carreiras-policiais-01';
 
   /* =========================================================
-     Tracking de Lead — PixelX / GTM   (ver TRACKING.md)
+     Tracking de Lead — Modelo A (§5): quem dispara é o PAINEL
 
-     REGRA DE OURO: exatamente UM emissor de Lead.
+     REGRA DE OURO: exatamente UM emissor de Lead. Aqui ele é a regra de
+     conversão do painel da PixelX, vinculada ao id opaco do <form>
+     (IPEyzyfmJhKQEYIXAlZH). Este arquivo NÃO emite conversão.
 
-     🔴 CAUSA DO LEAD INDO PARA TODAS AS TAGS META
+     POR QUE O MODELO B FOI REMOVIDO
 
-     Este site está em Modelo B: quem dispara é o `send_event` daqui. E um
-     `send_event` é NÃO-ROTEADO — ele não passa por regra de conversão nenhuma,
-     então a PixelX o entrega pelo padrão da conta, que é TODOS os destinos.
-     Daí o Lead aparecer nas três tags Meta.
-
-     Nas landings que estão certas (captura-cppem, pmpe, ManyChat, aniversário,
-     colégio, mentoria) quem dispara é a REGRA DO PAINEL, vinculada ao id opaco
-     no <form>. A regra tem destino configurado, e é isso que faz a conversão
-     chegar só onde deve.
+     Antes o site chamava `pixel_x_app.send_event()` diretamente. Um send_event
+     é NÃO-ROTEADO: não passa por regra de conversão nenhuma, então a PixelX o
+     entrega pelo padrão da conta — que aqui era TODOS os destinos. Era isso que
+     fazia o Lead aparecer nas três tags Meta.
 
      O mesmo mecanismo explica o sintoma oposto visto no PMPE (§8.7), onde o
-     send_event não chegava a NENHUMA tag: sem roteamento, o destino é o padrão
-     da conta — que pode ser tudo ou nada. Nunca é o destino certo por acaso.
+     send_event não chegava a NENHUMA tag. Sem roteamento, o destino é o padrão
+     da conta: pode ser tudo ou nada, nunca o destino certo por acaso.
 
-     ➜ CORREÇÃO (2 passos, precisa do painel):
-        1. Cadastrar este formulário no painel da PixelX e pegar o id opaco.
-        2. Trocar o id do <form> no index.html por esse valor, e mudar
-           LEAD_MODE para 'painel' aqui embaixo.
-       Feito isso, o send_event para de ser chamado e a regra roteia sozinha.
+     Quem roteia é a REGRA, e a regra só existe atrelada ao id do <form>.
 
-     ⚠ Enquanto LEAD_MODE continuar 'site', o Lead segue indo para todas as
-       tags. Trocar para 'painel' ANTES de cadastrar no painel zera o Lead —
-       não faça um sem o outro.
+     O que este arquivo faz: valida, grava na planilha, redireciona — e não
+     atrapalha a conversão (sem preventDefault no clique válido, sem
+     stopPropagation quando válido, sem sair da página cedo demais).
      ========================================================= */
-  var LEAD_MODE = 'site';          // 'site' (Modelo B) | 'painel' (Modelo A)
   var PHONE_MODE = 'celular_br';   // 'celular_br' | 'celular_ou_fixo_br' | 'internacional'
   var REDIRECT_DELAY_MS = 1500;    // §7.6 — abaixo de ~1s começa a perder eventos
-  var PIXEL_TIMEOUT_MS = 3000;     // §8.5 — espera o pixel_x_app ficar pronto
 
   /* ---------- ano ---------- */
   var year = document.getElementById('year');
@@ -167,92 +158,25 @@
     return d.length === 11 && d[2] === '9';   // celular_br (padrão)
   }
 
-  /* E.164: Meta e Google casam telefone por esse formato. Sem o código do
-     país, "81999967415" vira "+81999967415" — que é Japão — e o match falha. */
-  function toE164(v) {
-    var d = phoneDigitsNacional(v);
-    if (d.length > 11 && d.indexOf('55') === 0) d = d.slice(2);
-    return d ? '+55' + d : '';
-  }
-
-  /* §8.5 — pixel_x_app é criado pelo GTM e o start() dela é async. Em conexão
-     lenta o objeto pode não existir na hora do envio; sem esta espera o Lead
-     some sem erro nenhum. */
-  function waitForPixel(timeoutMs) {
-    return new Promise(function (resolve) {
-      function pronto() {
-        return window.pixel_x_app && typeof window.pixel_x_app.send_event === 'function';
-      }
-      if (pronto()) return resolve(true);
-
-      var inicio = Date.now();
-      var t = setInterval(function () {
-        if (pronto()) {
-          clearInterval(t);
-          resolve(true);
-        } else if (Date.now() - inicio > (timeoutMs || PIXEL_TIMEOUT_MS)) {
-          clearInterval(t);
-          console.warn('[tracking] pixel_x_app não ficou pronto a tempo; Lead não enviado.');
-          resolve(false);
-        }
-      }, 100);
-    });
-  }
-
-  /* Emissor ÚNICO de Lead. A guarda cobre duplo clique, listener duplicado e
-     script incluído duas vezes. */
-  var leadEnviado = false;
-
-  function trackLead(dados) {
-    if (LEAD_MODE !== 'site') return Promise.resolve(false);
-
-    if (leadEnviado) {
-      console.warn('[tracking] Lead já enviado nesta página; ignorando.');
-      return Promise.resolve(false);
-    }
-    leadEnviado = true;
-
-    return waitForPixel().then(function (ok) {
-      if (!ok) return false;
-
-      return window.pixel_x_app.send_event({
-        event_name: 'Lead',
-        lead_name: dados.nome || '',
-        lead_email: String(dados.email || '').trim().toLowerCase(),
-        lead_phone: toE164(dados.whatsapp)
-      }).then(function () {
-        console.log('[tracking] Lead enviado.');
-        return true;
-      });
-    }).catch(function (err) {
-      console.error('[tracking] send_event falhou:', err);
-      leadEnviado = false;          // libera para nova tentativa
-      return false;
-    });
-  }
-
-  /* Superfície de diagnóstico no console (§10) e ponto de entrada para
-     formulários sem submit nativo (§8.3):
-       cppemTracking.state()            -> modo, se já enviou, se o pixel está pronto
-       cppemTracking.isPhone('...')     -> testa a regra de telefone
-       cppemTracking.toE164('...')      -> confere a normalização
-       cppemTracking.trackLead({...})   -> dispara o Lead manualmente */
+  /* Superfície de diagnóstico no console (§10). Sem trackLead/send_event: no
+     Modelo A o site não emite conversão — quem emite é a regra do painel.
+       cppemTracking.isPhone('...')  -> testa a regra de telefone
+       cppemTracking.state()         -> confere se a PixelX carregou e se o id
+                                        do painel está no <form> */
   window.cppemTracking = {
-    trackLead: trackLead,
     isPhone: isPhone,
-    toE164: toE164,
     state: function () {
       return {
-        leadMode: LEAD_MODE,
-        leadEnviado: leadEnviado,
-        pixelPronto: !!(window.pixel_x_app && window.pixel_x_app.send_event)
+        modelo: 'A (painel)',
+        pixelCarregado: !!window.pixel_x_app,
+        formDoPainel: !!document.getElementById(PIXELX_ID)
       };
     }
   };
-  window.trackLead = trackLead;
 
   /* ---------- validação ---------- */
-  var PIXELX_ID = 'lead_form_presencial_em_casa';   // trocar pelo id do painel
+  /* Identificador deste site no painel — o mesmo valor do id do <form>. */
+  var PIXELX_ID = 'IPEyzyfmJhKQEYIXAlZH';
 
   var form = document.getElementById(PIXELX_ID);
 
@@ -338,11 +262,10 @@
       data: new Date().toLocaleString('pt-BR')
     };
 
-    // 1. Lead primeiro, antes de qualquer coisa que tire o visitante da página.
-    //    No modo 'painel' isto não faz nada.
-    trackLead(payload);
+    /* O Lead NÃO é disparado aqui: no Modelo A quem dispara é a regra do
+       painel, quando o evento de submit propaga (ver segunda barreira). */
 
-    // 2. Planilha em fire-and-forget: com no-cors não dá para ler a resposta,
+    // Planilha em fire-and-forget: com no-cors não dá para ler a resposta,
     //    então esperar não garante nada — só atrasaria o visitante.
     var params = new URLSearchParams(payload).toString();
     fetch(ENDPOINT, {
@@ -376,12 +299,12 @@
      Roda SEMPRE antes de qualquer listener registrado no <form>, inclusive o
      que a PixelX instala de dentro de um start() assíncrono.
 
-     - Inválido            -> stopImmediatePropagation: o evento morre aqui e
-                              nenhum Lead é registrado com dado ruim.
-     - Válido, modo 'site' -> também morre aqui; quem dispara o Lead somos nós.
-     - Válido, modo painel -> propaga, e só a regra do painel dispara. */
+     - Inválido -> stopImmediatePropagation: o evento morre aqui e nenhum Lead
+                   é registrado com dado ruim.
+     - Válido   -> PROPAGA, e é assim que a regra do painel registra o Lead.
+                   Cortar a propagação aqui zeraria a conversão. */
   document.addEventListener('submit', function (e) {
-    if (e.target !== form) return;
+    if (!form || e.target !== form) return;
 
     e.preventDefault();
 
@@ -391,8 +314,6 @@
       if (bad) bad.focus();
       return;
     }
-
-    if (LEAD_MODE === 'site') e.stopImmediatePropagation();
 
     enviar();
   }, true);
