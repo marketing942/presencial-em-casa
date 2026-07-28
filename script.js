@@ -6,7 +6,7 @@
 
   var ENDPOINT = 'https://script.google.com/macros/s/AKfycbxdFplWVSfhTjvyIA7HIWb645xRjGNhBVhTdTf5UMjo0lSpW_A_jCuys0qB4uImKXPQ/exec?aba=CASA';
   var ABA = 'CASA';
-  var WHATSAPP = 'https://wa.me/5581973105354?text=Quero%20quero%20come%C3%A7ar%20minha%20prepara%C3%A7%C3%A3o%20com%20o%20presencial%20em%20casa!%20%F0%9F%94%A5%F0%9F%92%80';
+  var WHATSAPP = 'https://checkout.cppem.com.br/pay/presencial-em-casa-carreiras-policiais-01';
 
   /* =========================================================
      Tracking de Lead — PixelX / GTM   (ver TRACKING.md)
